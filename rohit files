@@ -1,0 +1,46 @@
+--------------------------------- Jenkins files for publick repo from jenkins server to docker master---------------------------
+node
+{
+
+     def buildNumber = BUILD_NUMBER
+    stage('Git Checkout'){
+        git credentialsId: 'Git-Credentials', url: 'https://github.com/rindia/spring-boot-mongo-docker'
+    }
+    
+    stage(" Maven Clean Package"){
+      def mavenHome =  tool name: "Maven-3.6.2", type: "maven"
+      def mavenCMD = "${mavenHome}/bin/mvn"
+      sh "${mavenCMD} clean package"
+      
+    } 
+    
+    
+    stage('Build Docker Image'){
+        sh "docker build -t bobosaint/java-web-app:${buildNumber} ."
+    }
+    
+    stage('Push Docker Image'){
+        withCredentials([string(credentialsId: 'Docker_Hub_Pwd', variable: 'Docker_Hub_Pwd')]) {
+          sh "docker login -u bobosaint -p ${Docker_Hub_Pwd}"
+        }
+        sh "docker push bobosaint/java-web-app:${buildNumber}"
+     }
+        stage('remove dokcer image from jenkins') {
+        sh "docker rmi -f bobosaint/java-web-app:${buildNumber}"
+    }
+     
+      stage('Run Docker Image In Dev Server'){
+        
+        def dockerRun = "docker run  -d -p 8081:8080 --name java-web-app bobosaint/java-web-app:${buildNumber}"
+         
+         sshagent(['Docker_Swarm_Manager_Dev']) {
+          sh "ssh -o StrictHostKeyChecking=no ubuntu@15.207.113.237 docker service rm java-web-app || true"
+          sh "ssh  ubuntu@15.207.113.237 docker rm java-web-app || true"
+          sh "ssh  ubuntu@15.207.113.237 docker rmi -f  java-web-app || true"
+          sh "ssh  ubuntu@15.207.113.237 ${dockerRun}"
+       }
+       
+    }
+     
+}
+-----------------------------------------END--------------------------------
